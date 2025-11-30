@@ -89,9 +89,7 @@ Treatment_means = emmeans(model,spec = 'Treatment')
 Treatment_effects = contrast(Treatment_means, method = 'pairwise', adjust = "Tukey")
 summary(Treatment_effects)
 
-cld(Treatment_means)
-
-#note that the cumulative emission here is in kgCH4/ha-1
+cld(Treatment_means) #note that the cumulative emission here is in kgCH4/ha-1
 ```
 # Percentage decreases
 
@@ -101,8 +99,6 @@ reduction <- as.data.frame(Treatment_means) %>%
          pct_reduction = (C_value - emmean) / C_value * 100) %>%
   select(Treatment, emmean, pct_reduction)
 
-reduction
-#note that the cumulative emission (emmean) here is in kgCH4/ha-1
-
+reduction #note that the cumulative emission (emmean) here is in kgCH4/ha-1
 ```
 
