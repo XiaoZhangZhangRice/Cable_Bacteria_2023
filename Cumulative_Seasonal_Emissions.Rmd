@@ -1,0 +1,108 @@
+---
+title: "Cumulative_Seasonal_Emissions"
+author: "Zhang"
+output:
+  pdf_document:
+    toc: yes
+editor_options:
+  markdown:
+    wrap: sentence
+---
+# Necessary libraries
+
+```{r message=FALSE,warning=FALSE}
+library(knitr)
+library(ggplot2)
+theme_set(theme_bw())
+library(emmeans)
+library(multcomp)
+library(PLS205)
+library(lme4)
+library(lmerTest)
+library(multcompView)
+library(car)
+library(Rmisc) 
+library(dplyr) #https://r4ds.had.co.nz/ (Chapter 3, Chapter 5, look at filter and select)
+# https://bookdown.org/ansellbr/WEHI_tidyR_course_book/
+library(stringr) 
+library(data.table)
+library(GGally)
+library(formatR)
+library(readxl)
+library(openxlsx)
+library(zoo)
+library(dplyr)
+library(tidyr)
+library(zoo)
+```
+
+# Read Excel daily flux values(computed from gas analyses)
+
+```{r}
+flux <- read_excel("Cable_Bateria_2023_GHG_Data_Complete_21Jan2024.xlsx", sheet = 1)
+str(flux)
+flux$Plot <- as.factor(flux$Plot)
+
+flux %>%
+  summarise(n_dates = n_distinct(Date))
+```
+
+# Linear interpolation
+
+```{r}
+flux_2023 <- flux %>%
+  filter(Date >= as.POSIXct("2023-06-26") & Date <= as.POSIXct("2023-08-14"))
+
+start_date <- as.Date("2023-06-27")
+end_date <- as.Date("2023-08-14")
+date_seq <- seq.Date(start_date, end_date, by = "day")
+
+interpolated <- flux_2023 %>%
+  group_by(Plot) %>%
+  complete(Date = date_seq) %>%
+  #mutate(Trt = Trt)
+  ungroup()
+
+interpolated <- interpolated %>%
+  group_by(Plot) %>%
+  mutate(CH4_flux_g_ha_day = na.approx(CH4_flux_g_ha_day, rule = 2)) %>%
+  ungroup()
+
+
+rice_seasonal_emissions <- interpolated %>%
+  group_by(Plot) %>%
+  summarize(total_CH4_emissions = sum(CH4_flux_g_ha_day, na.rm = TRUE))%>% 
+  mutate(total_CH4_emissions_kg_ha = total_CH4_emissions/1000) %>%
+  mutate(Treatment = str_sub(Plot, 1, -2))   
+
+ggplot(interpolated, aes(y=CH4_flux_g_ha_day, x=Date, color = Plot)) + geom_point()
+#ggplot(flux_2025_rice_interpolated, aes(y=N2O_g_ha_day, x=Date, color = Plot)) + geom_point()
+```
+
+# Statistical analysis
+
+```{r}
+model <- lm(total_CH4_emissions_kg_ha~Treatment, data=rice_seasonal_emissions)
+anova(model)
+
+Treatment_means = emmeans(model,spec = 'Treatment')
+Treatment_effects = contrast(Treatment_means, method = 'pairwise', adjust = "Tukey")
+summary(Treatment_effects)
+
+cld(Treatment_means)
+
+#note that the cumulative emission here is in kgCH4/ha-1
+```
+# Percentage decreases
+
+```{r}
+reduction <- as.data.frame(Treatment_means) %>%
+  mutate(C_value = emmean[Treatment == "C"],
+         pct_reduction = (C_value - emmean) / C_value * 100) %>%
+  select(Treatment, emmean, pct_reduction)
+
+reduction
+#note that the cumulative emission (emmean) here is in kgCH4/ha-1
+
+```
+
